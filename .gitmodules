@@ -1,0 +1,3 @@
+[submodule "spinningup"]
+	path = spinningup
+	url = https://github.com/V0idwu/spinningup.git
