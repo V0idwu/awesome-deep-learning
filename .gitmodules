@@ -1,9 +1,3 @@
-[submodule "spinningup"]
-	path = spinningup
-	url = https://github.com/V0idwu/spinningup.git
-[submodule "tianshou"]
-	path = tianshou
-	url = https://github.com/V0idwu/tianshou.git
 [submodule "distribution-is-all-you-need"]
 	path = distribution-is-all-you-need
 	url = https://github.com/V0idwu/distribution-is-all-you-need.git
