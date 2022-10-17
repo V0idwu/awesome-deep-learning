@@ -1,8 +1,9 @@
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 from matplotlib.patches import Ellipse
 from scipy.stats import multivariate_normal
-plt.style.use('seaborn')
+
+plt.style.use("seaborn")
 
 # 生成数据
 def generate_X(true_Mu, true_Var):
@@ -54,21 +55,21 @@ def logLH(X, Pi, Mu, Var):
 
 # 画出聚类图像
 def plot_clusters(X, Mu, Var, Mu_true=None, Var_true=None):
-    colors = ['b', 'g', 'r']
+    colors = ["b", "g", "r"]
     n_clusters = len(Mu)
     plt.figure(figsize=(10, 8))
     plt.axis([-10, 15, -5, 15])
     plt.scatter(X[:, 0], X[:, 1], s=5)
     ax = plt.gca()
     for i in range(n_clusters):
-        plot_args = {'fc': 'None', 'lw': 2, 'edgecolor': colors[i], 'ls': ':'}
+        plot_args = {"fc": "None", "lw": 2, "edgecolor": colors[i], "ls": ":"}
         ellipse = Ellipse(Mu[i], 3 * Var[i][0], 3 * Var[i][1], **plot_args)
         ax.add_patch(ellipse)
     if (Mu_true is not None) & (Var_true is not None):
         for i in range(n_clusters):
-            plot_args = {'fc': 'None', 'lw': 2, 'edgecolor': colors[i], 'alpha': 0.5}
+            plot_args = {"fc": "None", "lw": 2, "edgecolor": colors[i], "alpha": 0.5}
             ellipse = Ellipse(Mu_true[i], 3 * Var_true[i][0], 3 * Var_true[i][1], **plot_args)
-            ax.add_patch(ellipse)         
+            ax.add_patch(ellipse)
     plt.show()
 
 
@@ -90,7 +91,7 @@ def update_Var(X, Mu, W):
     return Var
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # 生成数据
     true_Mu = [[0.5, 0.5], [5.5, 2.5], [1, 7]]
     true_Var = [[1, 3], [2, 2], [6, 2]]
@@ -101,7 +102,7 @@ if __name__ == '__main__':
     Mu = [[0, -1], [6, 0], [0, 9]]
     Var = [[1, 1], [1, 1], [1, 1]]
     Pi = [1 / n_clusters] * 3
-    W = np.ones((n_points, n_clusters)) / n_clusters 
+    W = np.ones((n_points, n_clusters)) / n_clusters
     Pi = W.sum(axis=0) / W.sum()
     # 迭代
     loglh = []
@@ -111,5 +112,5 @@ if __name__ == '__main__':
         W = update_W(X, Mu, Var, Pi)
         Pi = update_Pi(W)
         Mu = update_Mu(X, W)
-        print('log-likehood:%.3f'%loglh[-1])
+        print("log-likehood:%.3f" % loglh[-1])
         Var = update_Var(X, Mu, W)
