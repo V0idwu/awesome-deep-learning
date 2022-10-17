@@ -11,23 +11,23 @@
 
 # here put the import lib
 import collections
-import math
 import logging
-from pickletools import pyint
+import math
 import sys
+from pickletools import pyint
+
 import numpy as np
 
 np.random.seed(0)
-import pandas as pd
 import gym
+import pandas as pd
 import torch
 
 torch.manual_seed(0)
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-
 import boardgame2
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
 from boardgame2 import BLACK, WHITE
 from gym.envs.registration import register
 
@@ -83,7 +83,7 @@ class AlphaZeroNet(nn.Module):
             nn.Conv2d(256, 256, kernel_size=3, padding="same"),
             nn.BatchNorm2d(256),
             nn.ReLU(),
-            nn.Conv2d(256, 2, kernel_size=3, padding="same"),
+            nn.Conv2d(256, 1, kernel_size=3, padding="same"),
         )
 
         # value net
@@ -206,6 +206,8 @@ class AlphaZeroAgent:
         count_sum = self.count[s].sum()
         c_init = 1.25
         c_base = 19652.0
+
+        # λ(s,a)  = coef / count_sum = c(s) / self.count[s] = c(s,a)
         coef = (c_init + np.log1p((1 + count_sum) / c_base)) * math.sqrt(count_sum) / (1.0 + self.count[s])
         if prior_noise:
             alpha = 1.0 / self.valid[s].sum()
@@ -225,13 +227,17 @@ class AlphaZeroAgent:
         next_v = self.search(next_canonical_board)  # recursive
         v = next_player * next_v
 
+        # s represents state of the board
+        # location represents action
         self.count[s][location] += 1
+
+        # q(s,a) <- q(s,a) + 1/c(s,a) * (G - q(s,a))
         self.q[s][location] += (v - self.q[s][location]) / self.count[s][location]
         return v
 
     def learn(self):
         players, boards, probs, winners = self.replayer.sample(64)
-        canonical_boards = players[:, np.newaxis, np.newaxis] * boards
+        canonical_boards = players[:, np.newaxis, np.newaxis] * boards  # experiences transform to one-player view
         targets = (players * winners)[:, np.newaxis]
 
         target_prob_tensor = torch.as_tensor(probs, dtype=torch.float)
@@ -284,4 +290,3 @@ if __name__ == "__main__":
             logging.info("test episode %d:", episode)
             winner, elapsed_steps = play_boardgame2_episode(env, agent, mode="test", verbose=True)
             logging.info("test episode %d: winner = %d, steps = %d", episode, winner, elapsed_steps)
-
