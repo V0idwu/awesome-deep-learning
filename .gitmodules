@@ -1,3 +1,6 @@
 [submodule "distribution-is-all-you-need"]
 	path = distribution-is-all-you-need
 	url = https://github.com/V0idwu/distribution-is-all-you-need.git
+[submodule "gnn-code"]
+	path = gnn-code
+	url = git@gitee.com:voidwu/gnn-code.git
