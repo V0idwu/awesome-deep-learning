@@ -3,4 +3,4 @@
 	url = https://github.com/V0idwu/distribution-is-all-you-need.git
 [submodule "gnn-code"]
 	path = gnn-code
-	url = git@gitee.com:voidwu/gnn-code.git
+	url = https://gitee.com/voidwu/gnn-code.git
