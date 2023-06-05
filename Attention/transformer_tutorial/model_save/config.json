@@ -1,0 +1,8 @@
+{
+    "vocab_size": 10000,
+    "hidden_dim": 128,
+    "max_len": 200,
+    "n_head": 4,
+    "drop_out": 0.01,
+    "layer_count": 3
+}
