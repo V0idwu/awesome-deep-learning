@@ -112,6 +112,7 @@ def pretrain():
             if step % 5000 == 0:
                 torch.save(model.state_dict(), f"Attention/transformer_tutorial/model_save/model_pretrain_{step}.pt")
     torch.save(model.state_dict(), f"Attention/transformer_tutorial/model_save/pretrain_done.pt")
+    torch.save(model.transformer.state_dict(), f"Attention/transformer_tutorial/model_save/transformer.pt")
 
 
 if __name__ == "__main__":
