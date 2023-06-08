@@ -1,0 +1,10 @@
+{
+    "vocab_size": 9030,
+    "hidden_dim": 64,
+    "n_head": 4,
+    "drop_out": 0.01,
+    "max_len": 35,
+    "encoder_layer_count": 3,
+    "decoder_layer_count": 3,
+    "padding_id": 1
+}
