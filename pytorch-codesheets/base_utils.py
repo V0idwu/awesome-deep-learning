@@ -9,48 +9,83 @@
 @Desc    :   None
 """
 
+import os
 import random
+import time
 
 import numpy as np
 import torch
 
 
-def setup_seed(seed: int = 1):
+# NOTE: 为了保证实验的可重复性，需要设置随机数种子。
+def setup_lib(seed: int = 1, torch_deterministic: bool = False):
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     np.random.seed(seed)
     random.seed(seed)
-
-
-#   NOTE: 对于不同线程的随机数种子设置，
-#         主要通过DataLoader的worker_init_fn参数来实现。
-#         默认情况下使用线程ID作为随机数种子。
-#         如果需要自己设定，可以参考以下代码：
-#         dataloader = DataLoader(dataset, batch_size=4, shuffle=True, worker_init_fn=worker_init_fn)
-#         GLOBAL_SEED = 1
-#         GLOBAL_WORKER_ID = None
-#         def worker_init_fn(worker_id):
-#             global GLOBAL_WORKER_ID
-#             GLOBAL_WORKER_ID = worker_id
-#             setup_seed(GLOBAL_SEED + worker_id)
-
-
-def setup_cuda(cuda: bool = True, torch_deterministic: bool = False, verbose: bool = False):
-    device = torch.device("cuda:0" if torch.cuda.is_available() and cuda else "cpu")
-
-    if verbose:
-        print("--------------- Device Info --------------")
-        print(f"{'Current device':<16}: {device}")
-        print(f"{'Pytorch version':<16}: {torch.__version__}")
-        print(f"{'CUDA version':<16}: {torch.version.cuda}")
-        print(f"{'cuDNN version':<16}: {torch.backends.cudnn.version()}")
-        if torch.cuda.is_available() and cuda:
-            print(f"{'Device count':<16}: {torch.cuda.device_count()}")
-            print(f"{'Device name':<16}: {torch.cuda.get_device_name(device)}")
-        print("------------------------------------------\n")
-
     torch.backends.cudnn.deterministic = torch_deterministic  # significantly slowed down
     torch.set_default_tensor_type(torch.FloatTensor)
     torch.set_default_dtype(torch.float32)
 
-    return device
+
+# NOTE: 对于不同线程的随机数种子设置，主要通过DataLoader的worker_init_fn参数来实现。
+# 默认情况下使用线程ID作为随机数种子。如果需要自己设定，可以参考以下代码：
+# dataloader = DataLoader(dataset, batch_size=4, shuffle=True, worker_init_fn=worker_init_fn)
+# GLOBAL_SEED = 1
+# GLOBAL_WORKER_ID = None
+# def worker_init_fn(worker_id):
+#     global GLOBAL_WORKER_ID
+#     GLOBAL_WORKER_ID = worker_id
+#     setup_seed(GLOBAL_SEED + worker_id)
+
+
+# NOTE: CPU和GPU的设备设置
+def setup_device(cuda: bool = True, device_ids: list = ["0"], verbose: bool = False):
+    if torch.cuda.is_available() and cuda:
+        assert torch.cuda.device_count() > 0, "No GPU found, please run without --cuda"
+        assert torch.cuda.device_count() >= len(
+            device_ids
+        ), f"Choosen GPU number {len(device_ids)} is larger than available GPU number {torch.cuda.device_count()}"
+
+        os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(device_ids)
+        if len(device_ids) == 1:
+            info = {"device": torch.device(f"cuda:{device_ids[0]}"), "device_ids": ["0"]}
+        elif len(device_ids) > 1:
+            info = {"device": None, "device_ids": device_ids}
+    else:
+        info = {"device": torch.device("cpu"), "device_ids": []}
+
+    if verbose:
+        print("---------------- Lib Info ----------------")
+        print(f"{'Pytorch version':<16}: {torch.__version__}")
+        print(f"{'CUDA version':<16}: {torch.version.cuda}")
+        print(f"{'cuDNN version':<16}: {torch.backends.cudnn.version()}")
+
+        print("--------------- Device Info --------------")
+        if torch.cuda.is_available() and cuda and len(device_ids) > 0:
+            for device_id in device_ids:
+                tmp = torch.device(f"cuda:{device_id}")
+                print(f"{'Choosen device':<16}: {tmp}")
+                print(f"{'Device name':<16}: {torch.cuda.get_device_name(tmp)}")
+        else:
+            print(f"{'Choosen device':<16}: {info['device']}")
+        print("------------------------------------------\n")
+
+    return info
+
+
+# NOTE:计算pytorch cuda运行时间，由于pytorch在cuda上的计算都是异步的，
+# 如果直接使用time.time()来记录时间差并不能计算得到真实的时间，需要调用
+# torch.cuda.synchronize()来同步时间。
+def calculate_time(func):
+    torch.cuda.synchronize()
+    t0 = time.time()
+    func()
+    torch.cuda.synchronize()
+    t1 = time.time()
+    return t1 - t0
+
+
+if __name__ == "__main__":
+    info = setup_device(cuda=True, verbose=True, device_ids=["0", "1"])
+    print(info)
