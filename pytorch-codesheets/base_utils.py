@@ -9,12 +9,37 @@
 @Desc    :   None
 """
 
+import logging
 import os
 import random
 import time
 
 import numpy as np
 import torch
+
+
+# NOTE: Print log to console
+class SimpleLogger:
+    def __init__(self, name: str = "default", log_level: int = logging.INFO) -> None:
+        self.__name = name
+        self.__log_level = log_level
+        self.init_stream_handler()
+
+    def init_stream_handler(self) -> None:
+        self.__stream_handler = logging.StreamHandler()
+        self.__stream_handler.setLevel(logging.DEBUG)
+        self.__stream_handler.setFormatter(
+            logging.Formatter(
+                fmt=f"[%(asctime)s] [{self.__name} -> %(funcName)s] [%(levelname)s]: %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            )
+        )
+
+    def get_logger(self) -> logging.Logger:
+        self.__logger = logging.getLogger(self.__name)
+        self.__logger.setLevel(self.__log_level)
+        self.__logger.addHandler(self.__stream_handler)
+        return self.__logger
 
 
 # NOTE: 为了保证实验的可重复性，需要设置随机数种子。
