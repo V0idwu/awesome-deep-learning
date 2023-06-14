@@ -14,54 +14,80 @@ import os
 import random
 import time
 
+import colorlog
 import numpy as np
 import torch
 
 
 # NOTE: Print log to console
-class SimpleLogger:
-    def __init__(self, name: str = "default", log_level: int = logging.INFO) -> None:
-        self.__name = name
-        self.__log_level = log_level
+class ConsoleLogger:
+    def __init__(self, name: str = "default", log_level: int = logging.DEBUG) -> None:
+        self.name = name
+        self.log_level = log_level
         self.init_stream_handler()
 
     def init_stream_handler(self) -> None:
-        self.__stream_handler = logging.StreamHandler()
-        self.__stream_handler.setLevel(logging.DEBUG)
-        self.__stream_handler.setFormatter(
+        self.stream_handler = logging.StreamHandler()
+        self.stream_handler.setLevel(self.log_level)
+        self.stream_handler.setFormatter(
             logging.Formatter(
-                fmt=f"[%(asctime)s] [{self.__name} -> %(funcName)s] [%(levelname)s]: %(message)s",
+                fmt=f"[%(asctime)s] [{self.name} -> %(funcName)s] [%(levelname)s]: %(message)s",
                 datefmt="%Y-%m-%d %H:%M:%S",
             )
         )
 
     def get_logger(self) -> logging.Logger:
-        self.__logger = logging.getLogger(self.__name)
-        self.__logger.setLevel(self.__log_level)
-        self.__logger.addHandler(self.__stream_handler)
+        self.__logger = logging.getLogger(self.name)
+        self.__logger.setLevel(self.log_level)
+        self.__logger.addHandler(self.stream_handler)
         return self.__logger
+
+
+class ColorConsoleLogger(ConsoleLogger):
+    LOG_COLOR_DCT = {
+        "INFO": "green",
+        "DEBUG": "cyan",
+        "WARNING": "yellow",
+        "ERROR": "red",
+        "CRITICAL": "bold_red",
+    }
+
+    def __init__(self, name: str = "default", log_level: int = logging.DEBUG) -> None:
+        super(ColorConsoleLogger, self).__init__(name, log_level)
+        self.name = name
+        self.init_stream_handler()
+
+    def init_stream_handler(self) -> None:
+        self.stream_handler = logging.StreamHandler()
+        self.stream_handler.setLevel(self.log_level)
+        color_formatter = colorlog.ColoredFormatter(
+            fmt=f"%(log_color)s[%(asctime)s] [{self.name}] [%(filename)s %(threadName)s -> %(funcName)s line:%(lineno)d] [%(levelname)s]: %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+            log_colors=self.LOG_COLOR_DCT,
+        )
+        self.stream_handler.setFormatter(color_formatter)
 
 
 # NOTE: Print log to file
 class FileLogger:
-    def __init__(self, name: str = "default", log_level: int = logging.INFO) -> None:
-        self.__name = name
-        self.__log_level = log_level
+    def __init__(self, name: str = "default", log_level: int = logging.DEBUG) -> None:
+        self.name = name
+        self.log_level = log_level
         self.init_file_handler()
 
     def init_file_handler(self) -> None:
-        self.__file_handler = logging.FileHandler(f"{self.__name}.log", encoding="utf-8")
-        self.__file_handler.setLevel(logging.DEBUG)
+        self.__file_handler = logging.FileHandler(f"{self.name}.log", encoding="utf-8")
+        self.__file_handler.setLevel(self.log_level)
         self.__file_handler.setFormatter(
             logging.Formatter(
-                fmt=f"[%(asctime)s] [{self.__name}] [%(filename)s %(threadName)s -> %(funcName)s line:%(lineno)d] [%(levelname)s]: %(message)s",
+                fmt=f"[%(asctime)s] [{self.name}] [%(filename)s %(threadName)s -> %(funcName)s line:%(lineno)d] [%(levelname)s]: %(message)s",
                 datefmt="%Y-%m-%d %H:%M:%S",
             )
         )
 
     def get_logger(self) -> logging.Logger:
-        self.__logger = logging.getLogger(self.__name)
-        self.__logger.setLevel(self.__log_level)
+        self.__logger = logging.getLogger(self.name)
+        self.__logger.setLevel(self.log_level)
         self.__logger.addHandler(self.__file_handler)
         return self.__logger
 
@@ -136,5 +162,9 @@ def calculate_time(func):
 
 
 if __name__ == "__main__":
-    info = setup_device(cuda=True, verbose=True, device_ids=["0", "1"])
-    print(info)
+    logger = ColorConsoleLogger(__name__, log_level=logging.DEBUG).get_logger()
+    logger.info("info")
+    logger.debug("debug")
+    logger.warning("warning")
+    logger.error("error")
+    logger.critical("critical")
