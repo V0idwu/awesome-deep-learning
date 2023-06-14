@@ -42,6 +42,30 @@ class SimpleLogger:
         return self.__logger
 
 
+# NOTE: Print log to file
+class FileLogger:
+    def __init__(self, name: str = "default", log_level: int = logging.INFO) -> None:
+        self.__name = name
+        self.__log_level = log_level
+        self.init_file_handler()
+
+    def init_file_handler(self) -> None:
+        self.__file_handler = logging.FileHandler(f"{self.__name}.log", encoding="utf-8")
+        self.__file_handler.setLevel(logging.DEBUG)
+        self.__file_handler.setFormatter(
+            logging.Formatter(
+                fmt=f"[%(asctime)s] [{self.__name}] [%(filename)s %(threadName)s -> %(funcName)s line:%(lineno)d] [%(levelname)s]: %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            )
+        )
+
+    def get_logger(self) -> logging.Logger:
+        self.__logger = logging.getLogger(self.__name)
+        self.__logger.setLevel(self.__log_level)
+        self.__logger.addHandler(self.__file_handler)
+        return self.__logger
+
+
 # NOTE: 为了保证实验的可重复性，需要设置随机数种子。
 def setup_lib(seed: int = 1, torch_deterministic: bool = False):
     torch.manual_seed(seed)
