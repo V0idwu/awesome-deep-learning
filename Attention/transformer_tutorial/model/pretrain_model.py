@@ -17,11 +17,13 @@ class PretrainModel(nn.Module):
 
         self.config = config
 
-    def forward(self, input_ids, token_type_ids=None, mask_lm_labels=None, next_sentance_labels=None):
+    def forward(
+        self, input_ids, token_type_ids=None, mask_lm_labels=None, next_sentance_labels=None
+    ):  # input_ids [batch_size, seq_len]
         p, e = self.transformer(input_ids, token_type_ids)
 
-        wmp = self.wm(e)
-        sclsp = self.scls(p)
+        wmp = self.wm(e)  # [batch_size, seq_len, vocab_size]
+        sclsp = self.scls(p)  # [batch_size, 2]
 
         if mask_lm_labels is not None and next_sentance_labels is not None:
             loss1 = self.loss_function(wmp.view(-1, self.config.vocab_size), mask_lm_labels.reshape(-1))

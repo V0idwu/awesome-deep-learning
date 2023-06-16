@@ -23,9 +23,9 @@ class MultiHeadAttention(nn.Module):
         self.dropout = nn.Dropout(config.drop_out)
 
     def split(self, tensor):
-        a, b, c = tensor.size()
-        d = c // self.n_head
-        return tensor.view(a, b, self.n_head, d).permute(0, 2, 1, 3)
+        a, b, c = tensor.size()  # a,b,c = batch_size, seq_len, hidden_dim
+        d = c // self.n_head  # d = hidden_dim / n_head
+        return tensor.view(a, b, self.n_head, d).permute(0, 2, 1, 3)  # [batch_size, seq_len, n_head, d]
 
     def concat(self, tensor):
         a, b, c, d = tensor.size()
@@ -39,8 +39,8 @@ class MultiHeadAttention(nn.Module):
         v = s @ v
         return v
 
-    def forward(self, x):
-        k, q, v = self.wk(x), self.wq(x), self.wv(x)
+    def forward(self, x):  # x: [batch_size, seq_len, hidden_dim]
+        k, q, v = self.wk(x), self.wq(x), self.wv(x)  # k, q, v: [batch_size, seq_len, hidden_dim]
         k, q, v = self.split(k), self.split(q), self.split(v)
         v = self.attention(k, q, v)
         v = self.concat(v)

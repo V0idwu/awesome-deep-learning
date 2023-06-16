@@ -18,6 +18,7 @@ class PretrainDataSet(Dataset):
         with open("Attention/transformer_tutorial/data/三体.txt", "r") as f:
             lines = f.readlines()
 
+        # positive samples
         ds = []
         for line in tqdm(lines):
             line = line.strip()
@@ -29,6 +30,7 @@ class PretrainDataSet(Dataset):
             for i in range(len(ts) - 1):
                 ds.append([ts[i], ts[i + 1]])
 
+        # negative samples
         nds = []
         for i in range(len(ds)):
             id1 = random.randint(0, len(ds) - 1)

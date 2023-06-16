@@ -18,13 +18,13 @@ class Embedding(nn.Module):
         self.device = config.device
 
     def forward(self, input_ids, token_type_ids=None):
-        seq_length = input_ids.size(1)
+        seq_length = input_ids.size(1)  # [batch_size, seq_len]
         position_ids = torch.arange(seq_length, dtype=torch.long, device=self.device)
         if token_type_ids is None:
             token_type_ids = torch.zeros_like(input_ids, device=self.device)
 
-        we = self.word_embeddings(input_ids)
-        pe = self.position_embeddings(position_ids)
-        te = self.token_type_embedding(token_type_ids)
+        we = self.word_embeddings(input_ids)  # [batch_size, seq_len, hidden_dim]
+        pe = self.position_embeddings(position_ids)  # [seq_len, hidden_dim]
+        te = self.token_type_embedding(token_type_ids)  # [batch_size, seq_len, hidden_dim]
 
         return we + pe + te

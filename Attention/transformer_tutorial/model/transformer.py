@@ -7,6 +7,7 @@ from .multi_head_attention import MultiHeadAttention
 from .pooler import Pooler
 
 
+# Encoder
 class Transformer(nn.Module):
     def __init__(self, config) -> None:
         super(Transformer, self).__init__()
@@ -17,7 +18,7 @@ class Transformer(nn.Module):
         self.device = config.device
 
     def forward(self, input_ids, token_type_ids=None):
-        em = self.embedding(input_ids, token_type_ids)
+        em = self.embedding(input_ids, token_type_ids)  # [batch_size, seq_len, hidden_dim]
         for layer in self.layers:
             em = layer(em)
         p = self.pooler(em)
