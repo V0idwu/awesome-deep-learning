@@ -4,6 +4,3 @@
 [submodule "gnn-code"]
 	path = gnn-code
 	url = https://gitee.com/voidwu/gnn-code.git
-[submodule "External-Attention-pytorch"]
-	path = External-Attention-pytorch
-	url = https://github.com/xmu-xiaoma666/External-Attention-pytorch.git
