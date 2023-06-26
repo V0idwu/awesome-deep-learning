@@ -4,3 +4,6 @@
 [submodule "gnn-code"]
 	path = gnn-code
 	url = https://gitee.com/voidwu/gnn-code.git
+[submodule "meta-learning-code"]
+	path = meta-learning-code
+	url = https://gitee.com/voidwu/meta-learning-code.git
