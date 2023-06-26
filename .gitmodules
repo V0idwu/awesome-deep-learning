@@ -7,3 +7,6 @@
 [submodule "meta-learning-code"]
 	path = meta-learning-code
 	url = https://gitee.com/voidwu/meta-learning-code.git
+[submodule "deep-rl-code"]
+	path = deep-rl-code
+	url = https://gitee.com/voidwu/deep-rl-code.git
