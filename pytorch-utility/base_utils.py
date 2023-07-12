@@ -14,82 +14,8 @@ import os
 import random
 import time
 
-import colorlog
 import numpy as np
 import torch
-
-
-# NOTE: Print log to console
-class ConsoleLogger:
-    def __init__(self, name: str = "default", log_level: int = logging.DEBUG) -> None:
-        self.name = name
-        self.log_level = log_level
-        self.init_stream_handler()
-
-    def init_stream_handler(self) -> None:
-        self.stream_handler = logging.StreamHandler()
-        self.stream_handler.setLevel(self.log_level)
-        self.stream_handler.setFormatter(
-            logging.Formatter(
-                fmt=f"[%(asctime)s] [{self.name} -> %(funcName)s] [%(levelname)s]: %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S",
-            )
-        )
-
-    def get_logger(self) -> logging.Logger:
-        self.__logger = logging.getLogger(self.name)
-        self.__logger.setLevel(self.log_level)
-        self.__logger.addHandler(self.stream_handler)
-        return self.__logger
-
-
-class ColorConsoleLogger(ConsoleLogger):
-    LOG_COLOR_DCT = {
-        "INFO": "green",
-        "DEBUG": "cyan",
-        "WARNING": "yellow",
-        "ERROR": "red",
-        "CRITICAL": "bold_red",
-    }
-
-    def __init__(self, name: str = "default", log_level: int = logging.DEBUG) -> None:
-        super(ColorConsoleLogger, self).__init__(name, log_level)
-        self.name = name
-        self.init_stream_handler()
-
-    def init_stream_handler(self) -> None:
-        self.stream_handler = logging.StreamHandler()
-        self.stream_handler.setLevel(self.log_level)
-        color_formatter = colorlog.ColoredFormatter(
-            fmt=f"%(log_color)s[%(asctime)s] [{self.name}] [%(filename)s %(threadName)s -> %(funcName)s line:%(lineno)d] [%(levelname)s]: %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-            log_colors=self.LOG_COLOR_DCT,
-        )
-        self.stream_handler.setFormatter(color_formatter)
-
-
-# NOTE: Print log to file
-class FileLogger:
-    def __init__(self, name: str = "default", log_level: int = logging.DEBUG) -> None:
-        self.name = name
-        self.log_level = log_level
-        self.init_file_handler()
-
-    def init_file_handler(self) -> None:
-        self.__file_handler = logging.FileHandler(f"{self.name}.log", encoding="utf-8")
-        self.__file_handler.setLevel(self.log_level)
-        self.__file_handler.setFormatter(
-            logging.Formatter(
-                fmt=f"[%(asctime)s] [{self.name}] [%(filename)s %(threadName)s -> %(funcName)s line:%(lineno)d] [%(levelname)s]: %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S",
-            )
-        )
-
-    def get_logger(self) -> logging.Logger:
-        self.__logger = logging.getLogger(self.name)
-        self.__logger.setLevel(self.log_level)
-        self.__logger.addHandler(self.__file_handler)
-        return self.__logger
 
 
 # NOTE: 为了保证实验的可重复性，需要设置随机数种子。
@@ -161,10 +87,33 @@ def calculate_time(func):
     return t1 - t0
 
 
-if __name__ == "__main__":
-    logger = ColorConsoleLogger(__name__, log_level=logging.DEBUG).get_logger()
-    logger.info("info")
-    logger.debug("debug")
-    logger.warning("warning")
-    logger.error("error")
-    logger.critical("critical")
+# NOTE: Print log to console
+class ConsoleLogger:
+    def __init__(self, log_name: str = "default", log_level: int = logging.DEBUG) -> None:
+        self.__name = log_name
+        self.__level = log_level
+        self.init_stream_handler()
+
+    def init_stream_handler(self) -> None:
+        self.stream_handler = logging.StreamHandler()
+        self.stream_handler.setLevel(self.__level)
+        self.stream_handler.setFormatter(
+            logging.Formatter(
+                fmt=f"[%(asctime)s] [{self.__name}] [%(filename)s %(threadName)s -> %(funcName)s line:%(lineno)d] [%(levelname)s]: %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            )
+        )
+
+    def get_logger(self) -> logging.Logger:
+        self.__logger = logging.getLogger(self.__name)
+        self.__logger.setLevel(self.__level)
+        self.__logger.addHandler(self.stream_handler)
+        return self.__logger
+
+    @property
+    def level(self):
+        return self.__level
+
+    @property
+    def name(self):
+        return self.__name
