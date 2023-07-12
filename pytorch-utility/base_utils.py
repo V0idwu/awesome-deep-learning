@@ -19,29 +19,26 @@ import torch
 
 
 # NOTE: 为了保证实验的可重复性，需要设置随机数种子。
-def setup_lib(seed: int = 1, torch_deterministic: bool = False):
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    np.random.seed(seed)
+def setup_seed(seed: int = 1, torch_deterministic: bool = True):
     random.seed(seed)
-    torch.backends.cudnn.deterministic = torch_deterministic  # significantly slowed down
-    torch.set_default_tensor_type(torch.FloatTensor)
-    torch.set_default_dtype(torch.float32)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = torch_deterministic  # CUDA运算的确定性
+    torch.backends.cudnn.benchmark = not torch_deterministic  # 数据变化的情况下，减少网络效率的变化
 
 
-# NOTE: 对于不同线程的随机数种子设置，主要通过DataLoader的worker_init_fn参数来实现。
-# 默认情况下使用线程ID作为随机数种子。如果需要自己设定，可以参考以下代码：
+# NOTE: 对于不同线程的随机数种子设置，主要通过DataLoader的worker_init_fn参数来实现。默认情况下使用线程ID作为随机数种子
 # dataloader = DataLoader(dataset, batch_size=4, shuffle=True, worker_init_fn=worker_init_fn)
-# GLOBAL_SEED = 1
-# GLOBAL_WORKER_ID = None
-# def worker_init_fn(worker_id):
-#     global GLOBAL_WORKER_ID
-#     GLOBAL_WORKER_ID = worker_id
-#     setup_seed(GLOBAL_SEED + worker_id)
+def worker_init_fn(worker_id, global_seed=1):
+    setup_seed(global_seed + worker_id)
 
 
 # NOTE: CPU和GPU的设备设置
 def setup_device(cuda: bool = True, device_ids: list = ["0"], verbose: bool = False):
+    torch.set_default_tensor_type(torch.FloatTensor)
+    torch.set_default_dtype(torch.float32)
     if torch.cuda.is_available() and cuda:
         assert torch.cuda.device_count() > 0, "No GPU found, please run without --cuda"
         assert torch.cuda.device_count() >= len(
