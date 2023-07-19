@@ -37,7 +37,6 @@ def worker_init_fn(worker_id, global_seed=1):
 
 # NOTE: CPU和GPU的设备设置
 def setup_device(cuda: bool = True, device_ids: list = ["0"], verbose: bool = False):
-    torch.set_default_tensor_type(torch.FloatTensor)
     torch.set_default_dtype(torch.float32)
     if torch.cuda.is_available() and cuda:
         assert torch.cuda.device_count() > 0, "No GPU found, please run without --cuda"
