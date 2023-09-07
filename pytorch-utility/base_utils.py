@@ -19,14 +19,19 @@ import torch
 
 
 # NOTE: 为了保证实验的可重复性，需要设置随机数种子。
-def setup_seed(seed: int = 1, torch_deterministic: bool = True):
+def setup_seed(seed: int = 227, torch_deterministic: bool = True):
+    """set random seed for pytorch, numpy and random library."""
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.enabled = False  # 为True的时候，每次返回的卷积算法将是确定的，即默认算法
     torch.backends.cudnn.deterministic = torch_deterministic  # CUDA运算的确定性
     torch.backends.cudnn.benchmark = not torch_deterministic  # 数据变化的情况下，减少网络效率的变化
+
+    """set pytorch type to float32"""
+    torch.set_default_dtype(torch.float32)
 
 
 # NOTE: 对于不同线程的随机数种子设置，主要通过DataLoader的worker_init_fn参数来实现。默认情况下使用线程ID作为随机数种子
@@ -35,9 +40,21 @@ def worker_init_fn(worker_id, global_seed=1):
     setup_seed(global_seed + worker_id)
 
 
+def try_gpu(i: int = 0):
+    """Return gpu(i) if exists, otherwise return cpu()."""
+    if torch.cuda.device_count() >= i + 1:
+        return torch.device(f"cuda:{i}")
+    return torch.device("cpu")
+
+
+def try_all_gpus():
+    """Return all available GPUs, or [cpu(),] if no GPU exists."""
+    devices = [torch.device(f"cuda:{i}") for i in range(torch.cuda.device_count())]
+    return devices if devices else [torch.device("cpu")]
+
+
 # NOTE: CPU和GPU的设备设置
 def setup_device(cuda: bool = True, device_ids: list = ["0"], verbose: bool = False):
-    torch.set_default_dtype(torch.float32)
     if torch.cuda.is_available() and cuda:
         assert torch.cuda.device_count() > 0, "No GPU found, please run without --cuda"
         assert torch.cuda.device_count() >= len(
@@ -46,11 +63,11 @@ def setup_device(cuda: bool = True, device_ids: list = ["0"], verbose: bool = Fa
 
         os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(device_ids)
         if len(device_ids) == 1:
-            info = {"device": torch.device(f"cuda:{device_ids[0]}"), "device_ids": ["0"]}
+            devices = [torch.device(f"cuda:{device_ids[0]}")]
         elif len(device_ids) > 1:
-            info = {"device": None, "device_ids": device_ids}
+            devices = [torch.device(f"cuda:{i}") for i in devices]
     else:
-        info = {"device": torch.device("cpu"), "device_ids": []}
+        devices = [torch.device("cpu")]
 
     if verbose:
         print("---------------- Lib Info ----------------")
@@ -59,16 +76,16 @@ def setup_device(cuda: bool = True, device_ids: list = ["0"], verbose: bool = Fa
         print(f"{'cuDNN version':<16}: {torch.backends.cudnn.version()}")
 
         print("--------------- Device Info --------------")
-        if torch.cuda.is_available() and cuda and len(device_ids) > 0:
+        if torch.cuda.is_available() and cuda and len(devices) > 0:
             for device_id in device_ids:
                 tmp = torch.device(f"cuda:{device_id}")
                 print(f"{'Choosen device':<16}: {tmp}")
                 print(f"{'Device name':<16}: {torch.cuda.get_device_name(tmp)}")
         else:
-            print(f"{'Choosen device':<16}: {info['device']}")
+            print(f"{'Choosen device':<16}: {devices[0]}")
         print("------------------------------------------\n")
 
-    return info
+    return devices
 
 
 # NOTE:计算pytorch cuda运行时间，由于pytorch在cuda上的计算都是异步的，
