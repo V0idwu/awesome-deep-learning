@@ -19,16 +19,26 @@ import torch
 
 
 # NOTE: 为了保证实验的可重复性，需要设置随机数种子。
-def setup_seed(seed: int = 227, torch_deterministic: bool = True):
+def setup_config(seed: int = 227):
     """set random seed for pytorch, numpy and random library."""
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.enabled = False  # 为True的时候，每次返回的卷积算法将是确定的，即默认算法
-    torch.backends.cudnn.deterministic = torch_deterministic  # CUDA运算的确定性
-    torch.backends.cudnn.benchmark = not torch_deterministic  # 数据变化的情况下，减少网络效率的变化
+    
+    # 设置 torch.backends.cudnn.benchmark=True 将会让程序在开始时花费一点额外时间，为整个网络的每个卷积层搜索最适合它的卷积实现算法，进而实现网络的加速。
+    # 设置这个 flag 可以让内置的 cuDNN 的 auto-tuner 自动寻找最适合当前配置的高效算法，来达到优化运行效率的问题。
+    # NOTE 注意事项1：适用场景是网络结构固定（不是动态变化的），网络的输入形状（包括 batch size，图片大小，输入的通道）是不变的，其实也就是一般情况下都比较适用。
+    #      反之，如果卷积层的设置一直变化，网络的输入数据在每次 iteration 都变化的话，会导致 cnDNN 每次都会去寻找一遍最优配置，这样反而会降低运行效率。
+    torch.backends.cudnn.benchmark = True
+
+    # NOTE 注意事项2: Benchmark模式会提升计算速度，但是由于计算中有随机性，每次网络前馈结果略有差异。如果想要避免这种结果波动，
+    #      设置：
+    torch.backends.cudnn.deterministic = True
+
+    # 设置为True，说明设置为使用使用非确定性算法
+    torch.backends.cudnn.enabled = True
 
     """set pytorch type to float32"""
     torch.set_default_dtype(torch.float32)
@@ -37,7 +47,7 @@ def setup_seed(seed: int = 227, torch_deterministic: bool = True):
 # NOTE: 对于不同线程的随机数种子设置，主要通过DataLoader的worker_init_fn参数来实现。默认情况下使用线程ID作为随机数种子
 # dataloader = DataLoader(dataset, batch_size=4, shuffle=True, worker_init_fn=worker_init_fn)
 def worker_init_fn(worker_id, global_seed=1):
-    setup_seed(global_seed + worker_id)
+    setup_config(global_seed + worker_id)
 
 
 def try_gpu(i: int = 0):
