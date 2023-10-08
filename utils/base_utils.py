@@ -26,7 +26,7 @@ def setup_config(seed: int = 227):
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
-    
+
     # 设置 torch.backends.cudnn.benchmark=True 将会让程序在开始时花费一点额外时间，为整个网络的每个卷积层搜索最适合它的卷积实现算法，进而实现网络的加速。
     # 设置这个 flag 可以让内置的 cuDNN 的 auto-tuner 自动寻找最适合当前配置的高效算法，来达到优化运行效率的问题。
     # NOTE 注意事项1：适用场景是网络结构固定（不是动态变化的），网络的输入形状（包括 batch size，图片大小，输入的通道）是不变的，其实也就是一般情况下都比较适用。
@@ -40,8 +40,9 @@ def setup_config(seed: int = 227):
     # 设置为True，说明设置为使用使用非确定性算法
     torch.backends.cudnn.enabled = True
 
-    """set pytorch type to float32"""
+    """set default data type for pytorch"""
     torch.set_default_dtype(torch.float32)
+    torch.set_default_tensor_type(torch.FloatTensor)
 
 
 # NOTE: 对于不同线程的随机数种子设置，主要通过DataLoader的worker_init_fn参数来实现。默认情况下使用线程ID作为随机数种子
