@@ -1176,32 +1176,56 @@ class DotProductAttention(nn.Module):
 
 
 class AdditiveAttention(nn.Module):
-    """Additive attention.
-
-    Defined in :numref:`subsec_batch_dot`"""
-
-    def __init__(self, num_hiddens, dropout, **kwargs):
+    """加性注意力"""
+    def __init__(self, key_size, query_size, num_hiddens, dropout, **kwargs):
         super(AdditiveAttention, self).__init__(**kwargs)
-        self.W_k = nn.LazyLinear(num_hiddens, bias=False)
-        self.W_q = nn.LazyLinear(num_hiddens, bias=False)
-        self.w_v = nn.LazyLinear(1, bias=False)
+        self.W_k = nn.Linear(key_size, num_hiddens, bias=False)
+        self.W_q = nn.Linear(query_size, num_hiddens, bias=False)
+        self.w_v = nn.Linear(num_hiddens, 1, bias=False)
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, queries, keys, values, valid_lens):
         queries, keys = self.W_q(queries), self.W_k(keys)
-        # After dimension expansion, shape of queries: (batch_size, no. of
-        # queries, 1, num_hiddens) and shape of keys: (batch_size, 1, no. of
-        # key-value pairs, num_hiddens). Sum them up with broadcasting
+        # 在维度扩展后，
+        # queries的形状：(batch_size，查询的个数，1，num_hidden)
+        # key的形状：(batch_size，1，“键－值”对的个数，num_hiddens)
+        # 使用广播方式进行求和
         features = queries.unsqueeze(2) + keys.unsqueeze(1)
         features = torch.tanh(features)
-        # There is only one output of self.w_v, so we remove the last
-        # one-dimensional entry from the shape. Shape of scores: (batch_size,
-        # no. of queries, no. of key-value pairs)
+        # self.w_v仅有一个输出，因此从形状中移除最后那个维度。
+        # scores的形状：(batch_size，查询的个数，“键-值”对的个数)
         scores = self.w_v(features).squeeze(-1)
         self.attention_weights = masked_softmax(scores, valid_lens)
-        # Shape of values: (batch_size, no. of key-value pairs, value
-        # dimension)
+        # values的形状：(batch_size，“键－值”对的个数，值的维度)
         return torch.bmm(self.dropout(self.attention_weights), values)
+
+# class AdditiveAttention(nn.Module):
+#     """Additive attention.
+
+#     Defined in :numref:`subsec_batch_dot`"""
+
+#     def __init__(self, num_hiddens, dropout, **kwargs):
+#         super(AdditiveAttention, self).__init__(**kwargs)
+#         self.W_k = nn.LazyLinear(num_hiddens, bias=False)
+#         self.W_q = nn.LazyLinear(num_hiddens, bias=False)
+#         self.w_v = nn.LazyLinear(1, bias=False)
+#         self.dropout = nn.Dropout(dropout)
+
+#     def forward(self, queries, keys, values, valid_lens):
+#         queries, keys = self.W_q(queries), self.W_k(keys)
+#         # After dimension expansion, shape of queries: (batch_size, no. of
+#         # queries, 1, num_hiddens) and shape of keys: (batch_size, 1, no. of
+#         # key-value pairs, num_hiddens). Sum them up with broadcasting
+#         features = queries.unsqueeze(2) + keys.unsqueeze(1)
+#         features = torch.tanh(features)
+#         # There is only one output of self.w_v, so we remove the last
+#         # one-dimensional entry from the shape. Shape of scores: (batch_size,
+#         # no. of queries, no. of key-value pairs)
+#         scores = self.w_v(features).squeeze(-1)
+#         self.attention_weights = masked_softmax(scores, valid_lens)
+#         # Shape of values: (batch_size, no. of key-value pairs, value
+#         # dimension)
+#         return torch.bmm(self.dropout(self.attention_weights), values)
 
 
 class AttentionDecoder(d2l.Decoder):

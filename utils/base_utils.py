@@ -42,7 +42,7 @@ def setup_config(seed: int = 227):
 
     """set default data type for pytorch"""
     torch.set_default_dtype(torch.float32)
-    torch.set_default_tensor_type(torch.FloatTensor)
+    # torch.set_default_tensor_type(torch.FloatTensor)
 
 
 # NOTE: 对于不同线程的随机数种子设置，主要通过DataLoader的worker_init_fn参数来实现。默认情况下使用线程ID作为随机数种子
@@ -65,7 +65,7 @@ def try_all_gpus():
 
 
 # NOTE: CPU和GPU的设备设置
-def setup_device(cuda: bool = True, device_ids: list = ["0"], verbose: bool = False):
+def try_device(cuda: bool = True, device_ids: list = ["0"], verbose: bool = False):
     if torch.cuda.is_available() and cuda:
         assert torch.cuda.device_count() > 0, "No GPU found, please run without --cuda"
         assert torch.cuda.device_count() >= len(
@@ -186,3 +186,7 @@ class EarlyStopping:
         path = os.path.join(self.save_path, "checkpoint.pt")
         torch.save(model.state_dict(), path)  # save best model state dict
         self.val_loss_min = val_loss
+
+
+if __name__ == "__main__":
+    setup_config()
