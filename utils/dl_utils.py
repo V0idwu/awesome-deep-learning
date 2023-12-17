@@ -58,7 +58,7 @@ def worker_init_fn(worker_id, global_seed=1):
     setup_config(global_seed + worker_id)
 
 
-def get_dataloader_workers():
+def get_dataloader_workers():  # @save
     """使用4个进程来读取数据"""
     return 4
 
@@ -314,19 +314,6 @@ def show_images(imgs, num_rows, num_cols, titles=None, scale=1.5):  # @save
     return axes
 
 
-def get_dataloader_workers():  # @save
-    """使用4个进程来读取数据"""
-    return 4
-
-
-def accuracy(y_hat, y):  # @save
-    """计算预测正确的数量"""
-    if len(y_hat.shape) > 1 and y_hat.shape[1] > 1:
-        y_hat = y_hat.argmax(axis=1)
-    cmp = y_hat.type(y.dtype) == y
-    return float(cmp.type(y.dtype).sum())
-
-
 class Accumulator:  # @save
     """在n个变量上累加"""
 
@@ -341,18 +328,6 @@ class Accumulator:  # @save
 
     def __getitem__(self, idx):
         return self.data[idx]
-
-
-# 同样，对于任意数据迭代器`data_iter`可访问的数据集，[**我们可以评估在任意模型`net`的精度**]。
-def evaluate_accuracy(net, data_iter):  # @save
-    """计算在指定数据集上模型的精度"""
-    if isinstance(net, torch.nn.Module):
-        net.eval()  # 将模型设置为评估模式
-    metric = Accumulator(2)  # 正确预测数、预测总数
-    with torch.no_grad():
-        for X, y in data_iter:
-            metric.add(accuracy(net(X), y), y.numel())
-    return metric[0] / metric[1]
 
 
 def train_epoch(net, train_iter, loss, updater):
@@ -433,7 +408,39 @@ class Animator:  # @save
         display.clear_output(wait=True)
 
 
-def train_epoch(net, train_iter, loss, updater):  # @save
+def accuracy(y_hat, y):  # @save
+    """计算预测正确的数量"""
+    if len(y_hat.shape) > 1 and y_hat.shape[1] > 1:
+        y_hat = y_hat.argmax(axis=1)
+    cmp = y_hat.type(y.dtype) == y
+    return float(cmp.type(y.dtype).sum())
+
+
+# 同样，对于任意数据迭代器`data_iter`可访问的数据集，[**我们可以评估在任意模型`net`的精度**]。
+def evaluate_accuracy(net, data_iter):  # @save
+    """计算在指定数据集上模型的精度"""
+    if isinstance(net, torch.nn.Module):
+        net.eval()  # 将模型设置为评估模式
+    metric = Accumulator(2)  # 正确预测数、预测总数
+    with torch.no_grad():
+        for X, y in data_iter:
+            metric.add(accuracy(net(X), y), y.numel())
+    return metric[0] / metric[1]
+
+
+def evaluate_loss(net, data_iter, loss):  # @save
+    """评估给定数据集上模型的损失"""
+    with torch.no_grad():
+        metric = Accumulator(2)  # 损失的总和,样本数量
+        for X, y in data_iter:
+            out = net(X)
+            y = y.reshape(out.shape[0])
+            l = loss(out, y)
+            metric.add(l.sum(), l.numel())
+    return metric[0] / metric[1]
+
+
+def train_epoch(net, train_iter, loss_func, updater):  # @save
     """训练模型一个迭代周期"""
     # 将模型设置为训练模式
     if isinstance(net, torch.nn.Module):
@@ -443,14 +450,13 @@ def train_epoch(net, train_iter, loss, updater):  # @save
     for X, y in train_iter:
         # 计算梯度并更新参数
         y_hat = net(X)
-        l = loss(y_hat, y)
+        l = loss_func(y_hat, y)
         if isinstance(updater, torch.optim.Optimizer):
             # 使用PyTorch内置的优化器和损失函数
             updater.zero_grad()
             l.mean().backward()
             updater.step()
         else:
-            # 使用定制的优化器和损失函数
             l.sum().backward()
             updater(X.shape[0])
         metric.add(float(l.sum()), accuracy(y_hat, y), y.numel())
@@ -458,11 +464,109 @@ def train_epoch(net, train_iter, loss, updater):  # @save
     return metric[0] / metric[2], metric[1] / metric[2]
 
 
-def train(net, train_iter, test_iter, loss, num_epochs, updater):  # @save
+def train(net, train_iter, test_iter, loss_func, num_epochs, updater):  # @save
     """训练模型"""
-    animator = Animator(xlabel="epoch", xlim=[1, num_epochs], ylim=[0.3, 0.9], legend=["train loss", "train acc", "test acc"])
+    animator = Animator(
+        xlabel="epoch", xlim=[1, num_epochs], ylim=[0.3, 0.9], legend=["train loss", "train acc", "test loss", "test acc"]
+    )
     for epoch in range(num_epochs):
-        train_metrics = train_epoch(net, train_iter, loss, updater)
+        train_metrics = train_epoch(net, train_iter, loss_func, updater)
+        train_loss, train_acc = train_metrics
         test_acc = evaluate_accuracy(net, test_iter)
-        animator.add(epoch + 1, train_metrics + (test_acc,))
-    train_loss, train_acc = train_metrics
+        test_loss = evaluate_loss(net, test_iter, loss_func)
+        animator.add(epoch + 1, (train_loss, train_acc) + (test_acc, test_loss))
+
+
+def copy_model_params(src_net, tar_net):
+    """将模型tar_net的参数复制到模型src_net"""
+    params1 = {param_name: param.data for param_name, param in src_net.named_parameters()}
+    params2 = {param_name: param.data for param_name, param in tar_net.named_parameters()}
+    params1.update(params2)
+    src_net.load_state_dict(params1)
+
+
+def get_k_fold_data(k, i, X, y):
+    """NOTE: 折交叉验证在返回第i个切片作为验证数据，其余部分作为训练数据。"""
+    assert k > 1
+    fold_size = X.shape[0] // k
+    X_train, y_train = None, None
+    for j in range(k):
+        idx = slice(j * fold_size, (j + 1) * fold_size)
+        X_part, y_part = X[idx, :], y[idx]
+        if j == i:
+            X_valid, y_valid = X_part, y_part
+        elif X_train is None:
+            X_train, y_train = X_part, y_part
+        else:
+            X_train = torch.cat([X_train, X_part], 0)
+            y_train = torch.cat([y_train, y_part], 0)
+    return X_train, y_train, X_valid, y_valid
+
+
+def k_fold(net, k, X_train, y_train, num_epochs, learning_rate, weight_decay, batch_size, verbose=False):
+    train_l_sum, valid_l_sum = 0, 0
+    for i in range(k):
+        data = get_k_fold_data(k, i, X_train, y_train)
+        net = net.copy()
+        train_ls, valid_ls = train(net, *data, num_epochs, learning_rate, weight_decay, batch_size)
+        train_l_sum += train_ls[-1]
+        valid_l_sum += valid_ls[-1]
+
+        # if i == 0:
+        #     dl_utils.plot(
+        #         list(range(1, num_epochs + 1)),
+        #         [train_ls, valid_ls],
+        #         xlabel="epoch",
+        #         ylabel="rmse",
+        #         xlim=[1, num_epochs],
+        #         legend=["train", "valid"],
+        #         yscale="log",
+        #     )
+        if verbose:
+            print(f"折{i + 1}，训练log rmse{float(train_ls[-1]):f}, " f"验证log rmse{float(valid_ls[-1]):f}")
+    return train_l_sum / k, valid_l_sum / k
+
+
+# Define Alias
+
+nn_Module = torch.nn.Module
+ones_like = torch.ones_like
+ones = torch.ones
+zeros_like = torch.zeros_like
+zeros = torch.zeros
+tensor = torch.tensor
+arange = torch.arange
+meshgrid = torch.meshgrid
+sin = torch.sin
+sinh = torch.sinh
+cos = torch.cos
+cosh = torch.cosh
+tanh = torch.tanh
+linspace = torch.linspace
+exp = torch.exp
+log = torch.log
+normal = torch.normal
+rand = torch.rand
+randn = torch.randn
+matmul = torch.matmul
+int32 = torch.int32
+int64 = torch.int64
+float32 = torch.float32
+concat = torch.cat
+stack = torch.stack
+abs = torch.abs
+eye = torch.eye
+sigmoid = torch.sigmoid
+batch_matmul = torch.bmm
+numpy = lambda x, *args, **kwargs: x.detach().numpy(*args, **kwargs)
+size = lambda x, *args, **kwargs: x.numel(*args, **kwargs)
+reshape = lambda x, *args, **kwargs: x.reshape(*args, **kwargs)
+to = lambda x, *args, **kwargs: x.to(*args, **kwargs)
+reduce_sum = lambda x, *args, **kwargs: x.sum(*args, **kwargs)
+argmax = lambda x, *args, **kwargs: x.argmax(*args, **kwargs)
+astype = lambda x, *args, **kwargs: x.type(*args, **kwargs)
+transpose = lambda x, *args, **kwargs: x.t(*args, **kwargs)
+reduce_mean = lambda x, *args, **kwargs: x.mean(*args, **kwargs)
+expand_dims = lambda x, *args, **kwargs: x.unsqueeze(*args, **kwargs)
+swapaxes = lambda x, *args, **kwargs: x.swapaxes(*args, **kwargs)
+repeat = lambda x, *args, **kwargs: x.repeat(*args, **kwargs)
