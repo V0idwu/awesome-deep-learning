@@ -330,31 +330,6 @@ class Accumulator:  # @save
         return self.data[idx]
 
 
-def train_epoch(net, train_iter, loss, updater):
-    """训练模型一个迭代周期"""
-    # 将模型设置为训练模式
-    if isinstance(net, torch.nn.Module):
-        net.train()
-    # 训练损失总和、训练准确度总和、样本数
-    metric = Accumulator(3)
-    for X, y in train_iter:
-        # 计算梯度并更新参数
-        y_hat = net(X)
-        l = loss(y_hat, y)
-        if isinstance(updater, torch.optim.Optimizer):
-            # 使用PyTorch内置的优化器和损失函数
-            updater.zero_grad()
-            l.mean().backward()
-            updater.step()
-        else:
-            # 使用定制的优化器和损失函数
-            l.sum().backward()
-            updater(X.shape[0])
-        metric.add(float(l.sum()), accuracy(y_hat, y), y.numel())
-    # 返回训练损失和训练精度
-    return metric[0] / metric[2], metric[1] / metric[2]
-
-
 class Animator:  # @save
     """在动画中绘制数据"""
 
@@ -416,8 +391,7 @@ def accuracy(y_hat, y):  # @save
     return float(cmp.type(y.dtype).sum())
 
 
-# 同样，对于任意数据迭代器`data_iter`可访问的数据集，[**我们可以评估在任意模型`net`的精度**]。
-def evaluate_accuracy(net, data_iter):  # @save
+def evaluate_accuracy(net, data_iter):
     """计算在指定数据集上模型的精度"""
     if isinstance(net, torch.nn.Module):
         net.eval()  # 将模型设置为评估模式
@@ -428,11 +402,36 @@ def evaluate_accuracy(net, data_iter):  # @save
     return metric[0] / metric[1]
 
 
-def evaluate_loss(net, data_iter, loss):  # @save
+def evaluate_accuracy_gpu(net, data_iter, device=None):  # @save
+    """使用GPU计算模型在数据集上的精度"""
+    if isinstance(net, torch.nn.Module):
+        net.eval()  # 设置为评估模式
+        if device is None:
+            device = next(iter(net.parameters())).device
+    # 正确预测的数量，总预测的数量
+    metric = Accumulator(2)
+    with torch.no_grad():
+        for X, y in data_iter:
+            if isinstance(X, list):
+                # BERT微调所需的（之后将介绍）
+                X = [x.to(device) for x in X]
+            else:
+                X = X.to(device)
+            y = y.to(device)
+            metric.add(accuracy(net(X), y), y.numel())
+    return metric[0] / metric[1]
+
+
+def evaluate_loss_gpu(net, data_iter, loss, device=None):  # @save
     """评估给定数据集上模型的损失"""
+    if isinstance(net, torch.nn.Module):
+        net.eval()  # 设置为评估模式
+        if device is None:
+            device = next(iter(net.parameters())).device
     with torch.no_grad():
         metric = Accumulator(2)  # 损失的总和,样本数量
         for X, y in data_iter:
+            X, y = X.to(device), y.to(device)
             out = net(X)
             y = y.reshape(out.shape[0])
             l = loss(out, y)
@@ -440,7 +439,7 @@ def evaluate_loss(net, data_iter, loss):  # @save
     return metric[0] / metric[1]
 
 
-def train_epoch(net, train_iter, loss_func, updater):  # @save
+def train_epoch(net, train_iter, loss_func, updater, timer, device):
     """训练模型一个迭代周期"""
     # 将模型设置为训练模式
     if isinstance(net, torch.nn.Module):
@@ -448,6 +447,8 @@ def train_epoch(net, train_iter, loss_func, updater):  # @save
     # 训练损失总和、训练准确度总和、样本数
     metric = Accumulator(3)
     for X, y in train_iter:
+        X, y = X.to(device), y.to(device)
+        timer.start()
         # 计算梯度并更新参数
         y_hat = net(X)
         l = loss_func(y_hat, y)
@@ -459,22 +460,27 @@ def train_epoch(net, train_iter, loss_func, updater):  # @save
         else:
             l.sum().backward()
             updater(X.shape[0])
-        metric.add(float(l.sum()), accuracy(y_hat, y), y.numel())
-    # 返回训练损失和训练精度
-    return metric[0] / metric[2], metric[1] / metric[2]
+        with torch.no_grad():
+            metric.add(float(l.sum()), accuracy(y_hat, y), y.numel())
+        timer.stop()
+    return metric
 
 
 def train(net, train_iter, test_iter, loss_func, num_epochs, updater):  # @save
     """训练模型"""
-    animator = Animator(
-        xlabel="epoch", xlim=[1, num_epochs], ylim=[0.3, 0.9], legend=["train loss", "train acc", "test loss", "test acc"]
-    )
+    animator = Animator(xlabel="epoch", xlim=[1, num_epochs], legend=["train loss", "train acc", "test loss", "test acc"])
+    device = dl_utils.try_gpu()
+    timer = dl_utils.Timer()
+    net.to(device)
     for epoch in range(num_epochs):
-        train_metrics = train_epoch(net, train_iter, loss_func, updater)
-        train_loss, train_acc = train_metrics
-        test_acc = evaluate_accuracy(net, test_iter)
-        test_loss = evaluate_loss(net, test_iter, loss_func)
-        animator.add(epoch + 1, (train_loss, train_acc) + (test_acc, test_loss))
+        train_metrics = train_epoch(net, train_iter, loss_func, updater, timer, device)
+        train_loss, train_acc = train_metrics[0] / train_metrics[2], train_metrics[1] / train_metrics[2]
+        # 返回训练损失和训练精度
+        test_acc = evaluate_accuracy_gpu(net, test_iter)
+        test_loss = evaluate_loss_gpu(net, test_iter, loss_func)
+        animator.add(epoch + 1, (train_loss, train_acc) + (test_loss, test_acc))
+    print(f"train loss {train_loss:.3f}, train acc {train_acc:.3f}, " f"test acc {test_acc:.3f}")
+    print(f"{train_metrics[2] * num_epochs / timer.sum():.1f} examples/sec " f"on {str(device)}")
 
 
 def copy_model_params(src_net, tar_net):
@@ -525,6 +531,21 @@ def k_fold(net, k, X_train, y_train, num_epochs, learning_rate, weight_decay, ba
         if verbose:
             print(f"折{i + 1}，训练log rmse{float(train_ls[-1]):f}, " f"验证log rmse{float(valid_ls[-1]):f}")
     return train_l_sum / k, valid_l_sum / k
+
+
+def init_weights(m):
+    # NOTE: 初始化模型参数, net.apply(init_weights)
+    if type(m) == torch.nn.Conv1d:
+        torch.nn.init.kaiming_normal_(m.weight)
+        if m.bias is not None:
+            torch.nn.init.constant_(m.bias, val=0.0)
+    elif type(m) == torch.nn.BatchNorm1d:
+        torch.nn.init.constant_(m.weight, val=1.0)
+        torch.nn.init.constant_(m.bias, val=0.0)
+    elif type(m) == torch.nn.Linear:
+        torch.nn.init.xavier_normal_(m.weight)
+        if m.bias is not None:
+            torch.nn.init.constant_(m.bias, val=0.0)
 
 
 # Define Alias
