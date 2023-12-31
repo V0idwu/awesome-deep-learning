@@ -21,6 +21,7 @@ import numpy as np
 import torch
 from IPython import display
 from matplotlib_inline import backend_inline
+from torch.utils.tensorboard import SummaryWriter
 
 dl_utils = sys.modules[__name__]
 
@@ -479,7 +480,7 @@ def train(net, train_iter, test_iter, loss_func, num_epochs, updater):  # @save
         test_acc = evaluate_accuracy_gpu(net, test_iter)
         test_loss = evaluate_loss_gpu(net, test_iter, loss_func)
         animator.add(epoch + 1, (train_loss, train_acc) + (test_loss, test_acc))
-    print(f"train loss {train_loss:.3f}, train acc {train_acc:.3f}, " f"test acc {test_acc:.3f}")
+    print(f"train loss {train_loss:.3f}, train acc {train_acc:.3f}, test loss {test_loss:.3f}, test acc {test_acc:.3f}")
     print(f"{train_metrics[2] * num_epochs / timer.sum():.1f} examples/sec " f"on {str(device)}")
 
 
@@ -546,6 +547,40 @@ def init_weights(m):
         torch.nn.init.xavier_normal_(m.weight)
         if m.bias is not None:
             torch.nn.init.constant_(m.bias, val=0.0)
+
+
+class TensorBoardLogger:
+    def __init__(self, log_dir: str = "runs", comment: str = "") -> None:
+        self.__log_dir = log_dir
+        self.__comment = comment
+        self.__writer = SummaryWriter(log_dir=self.__log_dir, comment=self.__comment)
+
+    def add_scalar(self, tag: str, scalar_value: float, global_step: int) -> None:
+        self.__writer.add_scalar(tag=tag, scalar_value=scalar_value, global_step=global_step)
+
+    def add_scalars(self, main_tag: str, tag_scalar_dict: dict, global_step: int) -> None:
+        self.__writer.add_scalars(main_tag=main_tag, tag_scalar_dict=tag_scalar_dict, global_step=global_step)
+
+    def add_histogram(self, tag: str, values: torch.Tensor, global_step: int) -> None:
+        self.__writer.add_histogram(tag=tag, values=values, global_step=global_step)
+
+    def add_image(self, tag: str, img_tensor: torch.Tensor, global_step: int) -> None:
+        self.__writer.add_image(tag=tag, img_tensor=img_tensor, global_step=global_step)
+
+    def add_images(self, tag: str, img_tensor: torch.Tensor, global_step: int) -> None:
+        self.__writer.add_images(tag=tag, img_tensor=img_tensor, global_step=global_step)
+
+    def add_figure(self, tag: str, figure: plt.Figure, global_step: int) -> None:
+        self.__writer.add_figure(tag=tag, figure=figure, global_step=global_step)
+
+    def add_video(self, tag: str, vid_tensor: torch.Tensor, global_step: int) -> None:
+        self.__writer.add_video(tag=tag, vid_tensor=vid_tensor, global_step=global_step)
+
+    def add_audio(self, tag: str, snd_tensor: torch.Tensor, global_step: int, sample_rate: int = 44100) -> None:
+        self.__writer.add_audio(tag=tag, snd_tensor=snd_tensor, global_step=global_step, sample_rate=sample_rate)
+
+    def add_text(self, tag: str, text_string: str, global_step: int) -> None:
+        self.__writer.add_text(tag=tag, text_string=text_string, global_step=global_step)
 
 
 # Define Alias
