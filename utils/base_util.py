@@ -12,11 +12,13 @@
 
 import logging
 import os
+import platform
 import random
 import sys
 import time
 
 import matplotlib.pyplot as plt
+import psutil
 import numpy as np
 import torch
 from IPython import display
@@ -64,49 +66,62 @@ def get_dataloader_workers():  # @save
     return 4
 
 
-def try_gpu(i: int = 0):
+def try_cuda_gpu(i: int = 0):
     """Return gpu(i) if exists, otherwise return cpu()."""
     if torch.cuda.device_count() >= i + 1:
         return torch.device(f"cuda:{i}")
     return torch.device("cpu")
 
 
-def try_all_gpus():
+def try_cuda_all_gpus():
     """Return all available GPUs, or [cpu(),] if no GPU exists."""
     devices = [torch.device(f"cuda:{i}") for i in range(torch.cuda.device_count())]
     return devices if devices else [torch.device("cpu")]
 
 
-# NOTE: CPU和GPU的设备设置
-def try_device(cuda: bool = True, device_ids: list = ["0"], verbose: bool = False):
-    if torch.cuda.is_available() and cuda:
-        assert torch.cuda.device_count() > 0, "No GPU found, please run without --cuda"
-        assert torch.cuda.device_count() >= len(
-            device_ids
-        ), f"Choosen GPU number {len(device_ids)} is larger than available GPU number {torch.cuda.device_count()}"
+def try_mps():
+    """Return mps device if exists, otherwise return cpu()."""
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
 
-        os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(device_ids)
-        if len(device_ids) == 1:
-            devices = [torch.device(f"cuda:{device_ids[0]}")]
-        elif len(device_ids) > 1:
-            devices = [torch.device(f"cuda:{i}") for i in devices]
-    else:
-        devices = [torch.device("cpu")]
+
+# NOTE: CPU和GPU的设备设置
+def try_device(gpu: bool = True, device_ids: list = ["0"], verbose: bool = False) -> list[torch.device]:
+    if platform.system() == "Darwin":  # MacOS
+        if torch.backends.mps.is_available():
+            devices = [torch.device("mps")]
+        else:
+            devices = [torch.device("cpu")]
+
+    elif platform.system() == "Linux" or platform.system() == "Windows":  # Linux or Windows
+
+        if torch.cuda.is_available() and gpu:
+            assert torch.cuda.device_count() > 0, "No GPU found, please run without --cuda"
+            assert torch.cuda.device_count() >= len(
+                device_ids
+            ), f"Choosen GPU number {len(device_ids)} is larger than available GPU number {torch.cuda.device_count()}"
+            os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(device_ids)
+            devices = [torch.device(f"cuda:{i}") for i in device_ids]
+        else:
+            devices = [torch.device("cpu")]
 
     if verbose:
-        print("---------------- Lib Info ----------------")
-        print(f"{'Pytorch version':<16}: {torch.__version__}")
-        print(f"{'CUDA version':<16}: {torch.version.cuda}")
-        print(f"{'cuDNN version':<16}: {torch.backends.cudnn.version()}")
+        print("------------- Torch Lib Info -------------")
+        print(f"{'Python version':<16}: {platform.python_version()}")
+        print(f"{'PyTorch version':<16}: {torch.__version__}")
+        if torch.cuda.is_available():
+            print(f"{'CUDA version':<16}: {torch.version.cuda}")
+            print(f"{'cuDNN version':<16}: {torch.backends.cudnn.version()}")
 
         print("--------------- Device Info --------------")
-        if torch.cuda.is_available() and cuda and len(devices) > 0:
-            for device_id in device_ids:
-                tmp = torch.device(f"cuda:{device_id}")
-                print(f"{'Choosen device':<16}: {tmp}")
-                print(f"{'Device name':<16}: {torch.cuda.get_device_name(tmp)}")
-        else:
-            print(f"{'Choosen device':<16}: {devices[0]}")
+        for device in devices:
+            print(f"{'Choosen device':<16}: {device}")
+            if torch.cuda.is_available() and gpu:
+                print(f"{'Device name':<16}: {torch.cuda.get_device_name(device)}")
+            else:
+                # 输出CPU的信息
+                print(f'{"Device name":<16}: {platform.processor()}')
         print("------------------------------------------\n")
 
     return devices
