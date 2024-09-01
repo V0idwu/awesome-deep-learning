@@ -18,14 +18,14 @@ import sys
 import time
 
 import matplotlib.pyplot as plt
-import psutil
 import numpy as np
+import psutil
 import torch
 from IPython import display
 from matplotlib_inline import backend_inline
 from torch.utils.tensorboard import SummaryWriter
 
-dl_utils = sys.modules[__name__]
+base_util = sys.modules[__name__]
 
 
 # NOTE: 为了保证实验的可重复性，需要设置随机数种子。
@@ -66,20 +66,20 @@ def get_dataloader_workers():  # @save
     return 4
 
 
-def try_cuda_gpu(i: int = 0):
+def try_cuda_gpu(i: int = 0) -> torch.device:
     """Return gpu(i) if exists, otherwise return cpu()."""
     if torch.cuda.device_count() >= i + 1:
         return torch.device(f"cuda:{i}")
     return torch.device("cpu")
 
 
-def try_cuda_all_gpus():
+def try_cuda_all_gpus() -> torch.device:
     """Return all available GPUs, or [cpu(),] if no GPU exists."""
     devices = [torch.device(f"cuda:{i}") for i in range(torch.cuda.device_count())]
     return devices if devices else [torch.device("cpu")]
 
 
-def try_mps():
+def try_mps() -> torch.device:
     """Return mps device if exists, otherwise return cpu()."""
     if torch.backends.mps.is_available():
         return torch.device("mps")
@@ -224,7 +224,7 @@ def use_svg_display():
 def set_figsize(figsize=(3.5, 2.5)):
     """Set the figure size for matplotlib."""
     use_svg_display()
-    dl_utils.plt.rcParams["figure.figsize"] = figsize
+    base_util.plt.rcParams["figure.figsize"] = figsize
 
 
 def set_axes(axes, xlabel, ylabel, xlim, ylim, xscale, yscale, legend):
@@ -259,7 +259,7 @@ def plot(
         legend = []
 
     set_figsize(figsize)
-    axes = axes if axes else dl_utils.plt.gca()
+    axes = axes if axes else base_util.plt.gca()
 
     def has_one_axis(X):
         """如果X有一个轴，输出True"""
@@ -314,7 +314,7 @@ class Timer:  # @save
 def show_images(imgs, num_rows, num_cols, titles=None, scale=1.5):  # @save
     """绘制图像列表"""
     figsize = (num_cols * scale, num_rows * scale)
-    _, axes = dl_utils.plt.subplots(num_rows, num_cols, figsize=figsize)
+    _, axes = base_util.plt.subplots(num_rows, num_cols, figsize=figsize)
     axes = axes.flatten()
     for i, (ax, img) in enumerate(zip(axes, imgs)):
         if torch.is_tensor(img):
@@ -366,14 +366,14 @@ class Animator:  # @save
         # 增量地绘制多条线
         if legend is None:
             legend = []
-        dl_utils.use_svg_display()
-        self.fig, self.axes = dl_utils.plt.subplots(nrows, ncols, figsize=figsize)
+        base_util.use_svg_display()
+        self.fig, self.axes = base_util.plt.subplots(nrows, ncols, figsize=figsize)
         if nrows * ncols == 1:
             self.axes = [
                 self.axes,
             ]
         # 使用lambda函数捕获参数
-        self.config_axes = lambda: dl_utils.set_axes(self.axes[0], xlabel, ylabel, xlim, ylim, xscale, yscale, legend)
+        self.config_axes = lambda: base_util.set_axes(self.axes[0], xlabel, ylabel, xlim, ylim, xscale, yscale, legend)
         self.X, self.Y, self.fmts = None, None, fmts
 
     def add(self, x, y):
@@ -482,29 +482,34 @@ def train_epoch(net, train_iter, loss_func, updater, timer, device):
     return metric
 
 
-def train(net, train_iter, test_iter, loss_func, num_epochs, updater):  # @save
+# def train_on_cpu(net, train_iter, test_iter, loss_func, num_epochs, updater):
+
+
+def train(net, train_dataloader, test_dataloader, loss_func, num_epochs, updater, device=None):
     """训练模型"""
-    animator = Animator(xlabel="epoch", xlim=[1, num_epochs], legend=["train loss", "train acc", "test loss", "test acc"])
-    device = dl_utils.try_gpu()
-    timer = dl_utils.Timer()
-    net.to(device)
+    animator = Animator(xlabel="epoch", xlim=[1, num_epochs], legend=["train loss", "train acc", "test acc"])
+    if device is None:
+        device = try_cuda_gpu()
+    timer = Timer()
+    if isinstance(net, torch.nn.Module):
+        net.to(device)
     for epoch in range(num_epochs):
-        train_metrics = train_epoch(net, train_iter, loss_func, updater, timer, device)
+        train_metrics = train_epoch(net, train_dataloader, loss_func, updater, timer, device)
         train_loss, train_acc = train_metrics[0] / train_metrics[2], train_metrics[1] / train_metrics[2]
         # 返回训练损失和训练精度
-        test_acc = evaluate_accuracy_gpu(net, test_iter)
-        test_loss = evaluate_loss_gpu(net, test_iter, loss_func)
-        animator.add(epoch + 1, (train_loss, train_acc) + (test_loss, test_acc))
-    print(f"train loss {train_loss:.3f}, train acc {train_acc:.3f}, test loss {test_loss:.3f}, test acc {test_acc:.3f}")
+        test_acc = evaluate_accuracy_gpu(net, test_dataloader)
+        # test_loss = evaluate_loss_gpu(net, test_iter, loss_func)
+        animator.add(epoch + 1, (train_loss, train_acc, test_acc))
+    print(f"train loss {train_loss:.3f}, train acc {train_acc:.3f}, test acc {test_acc:.3f}")
     print(f"{train_metrics[2] * num_epochs / timer.sum():.1f} examples/sec " f"on {str(device)}")
 
 
-def copy_model_params(src_net, tar_net):
+def copy_model_params(src_model, tar_model):
     """将模型tar_net的参数复制到模型src_net"""
-    params1 = {param_name: param.data for param_name, param in src_net.named_parameters()}
-    params2 = {param_name: param.data for param_name, param in tar_net.named_parameters()}
+    params1 = {param_name: param.data for param_name, param in src_model.named_parameters()}
+    params2 = {param_name: param.data for param_name, param in tar_model.named_parameters()}
     params1.update(params2)
-    src_net.load_state_dict(params1)
+    src_model.load_state_dict(params1)
 
 
 def get_k_fold_data(k, i, X, y):
