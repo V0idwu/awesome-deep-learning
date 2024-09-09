@@ -31,6 +31,7 @@ base_util = sys.modules[__name__]
 # NOTE: 为了保证实验的可重复性，需要设置随机数种子。
 def setup_config(seed: int = 227):
     """set random seed for pytorch, numpy and random library."""
+    os.environ["PYTHONHASHSEED"] = str(seed)
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -73,13 +74,7 @@ def try_cuda_gpu(i: int = 0) -> torch.device:
     return torch.device("cpu")
 
 
-def try_cuda_all_gpus() -> torch.device:
-    """Return all available GPUs, or [cpu(),] if no GPU exists."""
-    devices = [torch.device(f"cuda:{i}") for i in range(torch.cuda.device_count())]
-    return devices if devices else [torch.device("cpu")]
-
-
-def try_mps() -> torch.device:
+def try_mps_gpu() -> torch.device:
     """Return mps device if exists, otherwise return cpu()."""
     if torch.backends.mps.is_available():
         return torch.device("mps")
@@ -87,7 +82,7 @@ def try_mps() -> torch.device:
 
 
 # NOTE: CPU和GPU的设备设置
-def try_device(gpu: bool = True, device_ids: list = ["0"], verbose: bool = False) -> list[torch.device]:
+def try_gpu(gpu: bool = True, device_ids: list = ["0"], verbose: bool = False) -> list[torch.device]:
     if platform.system() == "Darwin":  # MacOS
         if torch.backends.mps.is_available():
             devices = [torch.device("mps")]
@@ -137,38 +132,6 @@ def calculate_time(func):
     torch.cuda.synchronize()
     t1 = time.time()
     return t1 - t0
-
-
-# NOTE: Print log to console
-class ConsoleLogger:
-    def __init__(self, log_name: str = "default", log_level: int = logging.DEBUG) -> None:
-        self.__name = log_name
-        self.__level = log_level
-        self.init_stream_handler()
-
-    def init_stream_handler(self) -> None:
-        self.stream_handler = logging.StreamHandler()
-        self.stream_handler.setLevel(self.__level)
-        self.stream_handler.setFormatter(
-            logging.Formatter(
-                fmt=f"[%(asctime)s] [{self.__name}] [%(filename)s %(threadName)s -> %(funcName)s line:%(lineno)d] [%(levelname)s]: %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S",
-            )
-        )
-
-    def get_logger(self) -> logging.Logger:
-        self.__logger = logging.getLogger(self.__name)
-        self.__logger.setLevel(self.__level)
-        self.__logger.addHandler(self.stream_handler)
-        return self.__logger
-
-    @property
-    def level(self):
-        return self.__level
-
-    @property
-    def name(self):
-        return self.__name
 
 
 class EarlyStopping:
@@ -474,6 +437,7 @@ def train_epoch(net, train_iter, loss_func, updater, timer, device):
             l.mean().backward()
             updater.step()
         else:
+            # 自定义的权重优化器
             l.sum().backward()
             updater(X.shape[0])
         with torch.no_grad():
@@ -482,19 +446,18 @@ def train_epoch(net, train_iter, loss_func, updater, timer, device):
     return metric
 
 
-# def train_on_cpu(net, train_iter, test_iter, loss_func, num_epochs, updater):
-
-
-def train(net, train_dataloader, test_dataloader, loss_func, num_epochs, updater, device=None):
+def train(net, train_dataloader, test_dataloader, updater, loss_fn, num_epochs):
     """训练模型"""
     animator = Animator(xlabel="epoch", xlim=[1, num_epochs], legend=["train loss", "train acc", "test acc"])
-    if device is None:
-        device = try_cuda_gpu()
     timer = Timer()
     if isinstance(net, torch.nn.Module):
+        device = try_cuda_gpu()
         net.to(device)
+    else:
+        device = torch.device("cpu")
+
     for epoch in range(num_epochs):
-        train_metrics = train_epoch(net, train_dataloader, loss_func, updater, timer, device)
+        train_metrics = train_epoch(net, train_dataloader, loss_fn, updater, timer, device)
         train_loss, train_acc = train_metrics[0] / train_metrics[2], train_metrics[1] / train_metrics[2]
         # 返回训练损失和训练精度
         test_acc = evaluate_accuracy_gpu(net, test_dataloader)

@@ -8,7 +8,7 @@ from torch.utils import data
 from torchvision import transforms
 
 sys.path.insert(0, Path("").parent.parent.resolve().as_posix())
-from utils import base_util
+from utils import dl_modules
 
 
 class LinearRegressionDataset(data.Dataset):
@@ -51,8 +51,8 @@ class LinearRegressionDataset(data.Dataset):
         return self.data_iter(batch_size)
 
     def render(self):
-        base_util.set_figsize()
-        base_util.plt.scatter(self.features[:, 1].detach().numpy(), self.labels.detach().numpy(), 1)
+        dl_modules.set_figsize()
+        dl_modules.plt.scatter(self.features[:, 1].detach().numpy(), self.labels.detach().numpy(), 1)
 
 
 class FashionMNISTDataset(data.Dataset):
@@ -83,13 +83,13 @@ class FashionMNISTDataset(data.Dataset):
 
     def get_dataloader(self, batch_size):
         return (
-            data.DataLoader(self.mnist_train, batch_size, shuffle=True, num_workers=base_util.get_dataloader_workers()),
-            data.DataLoader(self.mnist_test, batch_size, shuffle=False, num_workers=base_util.get_dataloader_workers()),
+            data.DataLoader(self.mnist_train, batch_size, shuffle=True, num_workers=dl_modules.get_dataloader_workers()),
+            data.DataLoader(self.mnist_test, batch_size, shuffle=False, num_workers=dl_modules.get_dataloader_workers()),
         )
 
     def render(self, batch_size=18):
         X, y = next(iter(data.DataLoader(self.mnist_train, batch_size)))
-        base_util.show_images(X.reshape(18, 64, 64), 2, 9, titles=self.get_fashion_mnist_labels(y))
+        dl_modules.show_images(X.reshape(18, 64, 64), 2, 9, titles=self.get_fashion_mnist_labels(y))
 
     def get_fashion_mnist_labels(self, labels):
         """Returns the text labels of the Fashion-MNIST dataset.
