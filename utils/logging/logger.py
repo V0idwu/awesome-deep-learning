@@ -1,48 +1,11 @@
 import logging
-from re import M
 
 import colorlog
 
 
-# NOTE: Print log to console
 class ConsoleLogger:
-    def __init__(self, log_name: str = "root", log_level: int = logging.DEBUG, formatter_type="simple"):
-        self.__name = log_name
-        self.__level = log_level
-        self.init_logger(formatter_type)
 
-    def init_logger(self, formatter_type):
-        self.console_handler = logging.StreamHandler()
-        self.console_handler.setLevel(self.__level)
-        if formatter_type == "standard":
-            formatter = logging.Formatter(
-                fmt=f"[%(asctime)s] [{self.__name}] [%(filename)s %(threadName)s -> %(funcName)s line:%(lineno)d] [%(levelname)s]: %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S",
-            )
-        elif formatter_type == "simple":
-            formatter = logging.Formatter(
-                fmt=f"[%(asctime)s] [%(levelname)s]: %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S",
-            )
-        self.console_handler.setFormatter(formatter)
-
-    def get_logger(self):
-        self.__logger = logging.getLogger(self.__name)
-        self.__logger.setLevel(logging.DEBUG)
-        self.__logger.addHandler(self.console_handler)
-        return self.__logger
-
-    @property
-    def level(self):
-        return self.__level
-
-    @property
-    def name(self):
-        return self.__name
-
-
-class CConsoleLogger:
-    LOG_COLOR_MAP = {
+    LOGLEVEL_2_COLOR = {
         "INFO": "green",
         "DEBUG": "cyan",
         "WARNING": "yellow",
@@ -50,26 +13,42 @@ class CConsoleLogger:
         "CRITICAL": "bold_red",
     }
 
-    def __init__(self, log_name: str = "default", log_level: int = logging.DEBUG, formatter_type="simple"):
+    def __init__(
+        self, log_name: str = "root", log_level: int = logging.DEBUG, formatter_type: str = "simple", use_colorlog: bool = True
+    ):
         self.__name = log_name
         self.__level = log_level
+        self.__use_colorlog = use_colorlog
         self.init_logger(formatter_type)
 
     def init_logger(self, formatter_type):
         self.console_handler = logging.StreamHandler()
         self.console_handler.setLevel(self.__level)
-        if formatter_type == "standard":
-            formatter = colorlog.ColoredFormatter(
-                fmt=f"%(log_color)s[%(asctime)s] [{self.__name}] [%(filename)s %(threadName)s -> %(funcName)s line:%(lineno)d] [%(levelname)s]: %(message)s",
+        if formatter_type == "detail":
+            formatter = logging.Formatter(
+                fmt=f"[%(asctime)s] [{self.__name}] [%(filename)s %(threadName)s -> %(funcName)s line:%(lineno)d] [%(levelname)s]: %(message)s",
                 datefmt="%Y-%m-%d %H:%M:%S",
-                log_colors=self.LOG_COLOR_MAP,
             )
+
+            if self.__use_colorlog:
+                formatter = colorlog.ColoredFormatter(
+                    fmt=f"%(log_color)s[%(asctime)s] [{self.__name}] [%(filename)s %(threadName)s -> %(funcName)s line:%(lineno)d] [%(levelname)s]: %(message)s",
+                    datefmt="%Y-%m-%d %H:%M:%S",
+                    log_colors=self.LOGLEVEL_2_COLOR,
+                )
+
         elif formatter_type == "simple":
-            formatter = colorlog.ColoredFormatter(
-                fmt=f"%(log_color)s[%(asctime)s] [%(levelname)s]: %(message)s",
+            formatter = logging.Formatter(
+                fmt=f"[%(asctime)s] [%(levelname)s]: %(message)s",
                 datefmt="%Y-%m-%d %H:%M:%S",
-                log_colors=self.LOG_COLOR_MAP,
             )
+            if self.__use_colorlog:
+                formatter = colorlog.ColoredFormatter(
+                    fmt=f"%(log_color)s[%(asctime)s] [%(levelname)s]: %(message)s",
+                    datefmt="%Y-%m-%d %H:%M:%S",
+                    log_colors=self.LOGLEVEL_2_COLOR,
+                )
+
         self.console_handler.setFormatter(formatter)
 
     def get_logger(self):
@@ -87,7 +66,6 @@ class CConsoleLogger:
         return self.__name
 
 
-# NOTE: Print log to file
 class FileLogger:
     def __init__(self, log_name: str = "default", log_level: int = logging.DEBUG) -> None:
         self.__name = log_name
@@ -125,14 +103,26 @@ class ConfLogger:
         return root_logger, loss_logger, acc_logger
 
 
-# NOTE: Print log to console and file
+# class CustomFilter(logging.Filter):
+#     def filter(self, record):
+#         return "loss" in record.getMessage()
 class MyLogger:
-    _nameToLevel = {"CRITICAL": 50, "FATAL": 50, "ERROR": 40, "WARN": 30, "WARNING": 30, "INFO": 20, "DEBUG": 10, "NOTSET": 0}
+    """A custom logging class that initializes based on the log parameters."""
+
+    _NAME2LEVEL = {
+        "CRITICAL": 50,
+        "FATAL": 50,
+        "ERROR": 40,
+        "WARN": 30,
+        "WARNING": 30,
+        "INFO": 20,
+        "DEBUG": 10,
+        "NOTSET": 0,
+    }
 
     def __init__(self, name: str = "root", log_params: dict = {}):
         self.__name = name
         self.__handlers = []
-        self.__filters = []
         for log_name, log_param in log_params.items():
             if log_param["log_type"] == "console":
                 handler = self.init_console_handler(log_name, log_param)
@@ -142,11 +132,7 @@ class MyLogger:
                 raise ValueError(f"log_type: {log_param['log_type']} is not supported")
             self.__handlers.append(handler)
 
-    def init_console_handler(self, log_name, log_param):
-        console_handler = logging.StreamHandler()
-        log_level = self._nameToLevel[log_param.get("log_level", logging.DEBUG)]
-        console_handler.setLevel(log_level)
-        log_formatter_type = log_param.get("log_formatter_type", "simple")
+    def _log_formatter(self, log_name, log_formatter_type):
         if log_formatter_type == "standard":
             formatter = logging.Formatter(
                 fmt=f"[%(asctime)s] [{log_name}] [%(filename)s %(threadName)s -> %(funcName)s line:%(lineno)d] [%(levelname)s]: %(message)s",
@@ -157,35 +143,31 @@ class MyLogger:
                 fmt=f"[%(asctime)s] [%(levelname)s]: %(message)s",
                 datefmt="%Y-%m-%d %H:%M:%S",
             )
-        console_handler.setFormatter(formatter)
-        log_filter = log_param.get("log_filter", None)
-        if log_filter is not None:
-            filter = logging.Filter(log_filter)
-            console_handler.addFilter(filter)
+        return formatter
+
+    def init_console_handler(self, log_name, log_param):
+        console_handler = logging.StreamHandler()
+        log_level = self._NAME2LEVEL[log_param.get("log_level", logging.DEBUG)]
+        console_handler.setLevel(log_level)
+        log_formatter = self._log_formatter(log_name, log_param.get("log_formatter_type", "simple"))
+        console_handler.setFormatter(log_formatter)
+        # log_filter_value = log_param.get("log_filter", None)
+        # if log_filter_value is not None:
+        #     filter = CustomFilter(log_filter_value)
+        #     console_handler.addFilter(filter)
         return console_handler
 
     def init_file_handler(self, log_name, log_param):
         log_path = log_param.get("log_path", f"{log_name}.log")
         file_handler = logging.FileHandler(log_path, encoding="utf-8")
-        log_level = self._nameToLevel[log_param.get("log_level", logging.DEBUG)]
+        log_level = self._NAME2LEVEL[log_param.get("log_level", logging.DEBUG)]
         file_handler.setLevel(log_level)
-        log_formatter_type = log_param.get("log_formatter_type", "simple")
-        if log_formatter_type == "standard":
-            formatter = logging.Formatter(
-                fmt=f"[%(asctime)s] [{log_name}] [%(filename)s %(threadName)s -> %(funcName)s line:%(lineno)d] [%(levelname)s]: %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S",
-            )
-        elif log_formatter_type == "simple":
-            formatter = logging.Formatter(
-                fmt=f"[%(asctime)s] [%(levelname)s]: %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S",
-            )
-        file_handler.setFormatter(formatter)
-
-        log_filter = log_param.get("log_filter", None)
-        if log_filter is not None:
-            filter = logging.Filter(log_filter)
-            file_handler.addFilter(filter)
+        log_formatter = self._log_formatter(log_name, log_param.get("log_formatter_type", "simple"))
+        file_handler.setFormatter(log_formatter)
+        # log_filter_value = log_param.get("log_filter", None)
+        # if log_filter_value is not None:
+        #     filter = CustomFilter(log_filter_value)
+        #     file_handler.addFilter(filter)
         return file_handler
 
     def get_logger(self):
@@ -193,21 +175,18 @@ class MyLogger:
         logger.setLevel(logging.DEBUG)
         for handler in self.__handlers:
             logger.addHandler(handler)
-        for filter in self.__filters:
-            logger.addFilter(filter)
         return logger
 
 
 if __name__ == "__main__":
-    # logger = ConsoleLogger("train.loss.log").get_logger()
-    # logger.info("hello world")
 
-    # logger = CConsoleLogger(__name__).get_logger()
-    # logger.debug("hello world")
-    # logger.info("hello world")
-    # logger.error("hello world")
-    # logger.warning("hello world")
-    # logger.critical("hello world")
+    # Test ConsoleLogger
+    logger = ConsoleLogger(log_name=__name__).get_logger()
+    logger.debug("hello world")
+    logger.info("hello world")
+    logger.error("hello world")
+    logger.warning("hello world")
+    logger.critical("hello world")
 
     # import logging.config
 
@@ -216,13 +195,14 @@ if __name__ == "__main__":
     # loss_logger = logging.getLogger("loss_log")
     # acc_logger = logging.getLogger("accurate_log")
 
+    # Test MyLogger
     params = {
         "train.acc": {
             "log_type": "file",
             "log_path": "train.log",
             "log_level": "INFO",
-            "log_formatter_type": "simple",
-            "log_filter": "train.acc",
+            "log_formatter_type": "standard",
+            # "log_filter": "train.acc",
         },
         "train.loss": {
             "log_type": "console",
@@ -233,8 +213,5 @@ if __name__ == "__main__":
 
     import time
 
-    losslogger = MyLogger(name="learn", log_params=params).get_logger()
-    losslogger.info(time.time())
-
-    # acclogger = MyLogger(logger_config).get_logger("train.acc")
-    # acclogger.info("hello world111")
+    logger = MyLogger(log_params=params).get_logger()
+    logger.info(time.time())
