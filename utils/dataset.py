@@ -10,6 +10,7 @@ from torchvision import transforms
 sys.path.insert(0, Path("").parent.parent.resolve().as_posix())
 from utils import dl_modules
 
+# %matplotlib inline
 
 class LinearRegressionDataset(data.Dataset):
     """
@@ -50,9 +51,10 @@ class LinearRegressionDataset(data.Dataset):
     def get_dataloader_scratch(self, batch_size):
         return self.data_iter(batch_size)
 
-    def render(self):
+    def plot(self):
         dl_modules.set_figsize()
         dl_modules.plt.scatter(self.features[:, 1].detach().numpy(), self.labels.detach().numpy(), 1)
+        dl_modules.plt.show()
 
 
 class FashionMNISTDataset(data.Dataset):
@@ -110,20 +112,68 @@ class FashionMNISTDataset(data.Dataset):
         return [text_labels[int(i)] for i in labels]
 
 
-if __name__ == "__main__":
-    batch_size = 10
-    num_examples = 1000
-    true_w = torch.tensor([2, -3.4])
-    true_b = 4.2
-    dataset = LinearRegressionDataset(true_w, true_b, num_examples)
-    # dl_utils.set_figsize()
-    # dl_utils.plt.scatter(dataset.features[:, 1].detach().numpy(), dataset.labels.detach().numpy(), 1)
-    data_iter = dataset.get_dataloader_scratch(batch_size)
-    print(next(iter(data_iter)))
+class SinSequenceDataset(data.Dataset):
 
-    dataset = FashionMNISTDataset(resize=64)
-    train_iter, test_iter = dataset.get_dataloader(batch_size=32)
-    for X, y in train_iter:
+    def __init__(self, num_examples,tau):
+        self.num_examples = num_examples
+        self.time, self.x, self.features, self.labels = self.synthetic_data(num_examples, tau)
+
+    def synthetic_data(self, num_examples, tau):
+        T = num_examples
+        time = torch.arange(0, T, dtype=torch.float32)
+        x = torch.abs(torch.sin(0.01 * time) + torch.normal(0, 0.2, (T,)))
+        features = torch.zeros((T - tau, tau))
+        for i in range(tau):
+            features[:, i] = x[i: T - tau + i]
+        labels  = x[tau:].reshape((-1, 1))
+        return time, x, features, labels
+
+    def __len__(self):
+        return self.num_examples
+
+    def __getitem__(self, idx):
+        if self.labels is not None:
+            return self.data[idx], self.labels[idx]
+        else:
+            return self.data[idx]
+        
+    def get_dataloader(self,n_train, batch_size):
+        return data.DataLoader(data.TensorDataset(self.features[:n_train], self.labels[:n_train]), batch_size, shuffle=True)
+
+    def plot(self):
+        dl_modules.plot(self.time, [self.x], "time", "x", xlim=[1, 1000], figsize=(6, 3))
+        dl_modules.plt.show()
+
+
+
+
+
+if __name__ == "__main__":
+    ''' LinearRegressionDataset '''
+    # batch_size = 10
+    # num_examples = 1000
+    # true_w = torch.tensor([2, -3.4])
+    # true_b = 4.2
+    # dataset = LinearRegressionDataset(true_w, true_b, num_examples)
+    # # dl_utils.set_figsize()
+    # # dl_utils.plt.scatter(dataset.features[:, 1].detach().numpy(), dataset.labels.detach().numpy(), 1)
+    # data_iter = dataset.get_dataloader_scratch(batch_size)
+    # print(next(iter(data_iter)))
+
+    ''' FashionMNISTDataset '''
+    # dataset = FashionMNISTDataset(resize=64)
+    # train_iter, test_iter = dataset.get_dataloader(batch_size=32)
+    # for X, y in train_iter:
+    #     print(X.shape, X.dtype, y.shape, y.dtype)
+    #     break
+    # # dataset.render()
+    
+    ''' SinSeriesDataset '''
+    dataset = SinSequenceDataset(num_examples=1000, tau=4)
+    dataset.plot()
+    data_iter = dataset.get_dataloader(600, 16)
+    # print(next(iter(data_iter)))
+    for X, y in data_iter:
         print(X.shape, X.dtype, y.shape, y.dtype)
         break
-    # dataset.render()
+    
