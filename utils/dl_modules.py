@@ -362,7 +362,7 @@ class Animator:  # @save
         display.clear_output(wait=True)
 
 
-def accuracy(y_hat, y):  # @save
+def accuracy(y_hat, y):
     """计算预测正确的数量"""
     if len(y_hat.shape) > 1 and y_hat.shape[1] > 1:
         y_hat = y_hat.argmax(axis=1)
@@ -370,19 +370,8 @@ def accuracy(y_hat, y):  # @save
     return float(cmp.type(y.dtype).sum())
 
 
-def evaluate_accuracy(net, data_iter):
+def evaluate_accuracy(net, data_iter, device=None):
     """计算在指定数据集上模型的精度"""
-    if isinstance(net, torch.nn.Module):
-        net.eval()  # 将模型设置为评估模式
-    metric = Accumulator(2)  # 正确预测数、预测总数
-    with torch.no_grad():
-        for X, y in data_iter:
-            metric.add(accuracy(net(X), y), y.numel())
-    return metric[0] / metric[1]
-
-
-def evaluate_accuracy_gpu(net, data_iter, device=None):  # @save
-    """使用GPU计算模型在数据集上的精度"""
     if isinstance(net, torch.nn.Module):
         net.eval()  # 设置为评估模式
         if device is None:
@@ -392,7 +381,7 @@ def evaluate_accuracy_gpu(net, data_iter, device=None):  # @save
     with torch.no_grad():
         for X, y in data_iter:
             if isinstance(X, list):
-                # BERT微调所需的（之后将介绍）
+                # BERT微调所需
                 X = [x.to(device) for x in X]
             else:
                 X = X.to(device)
@@ -401,7 +390,7 @@ def evaluate_accuracy_gpu(net, data_iter, device=None):  # @save
     return metric[0] / metric[1]
 
 
-def evaluate_loss_gpu(net, data_iter, loss, device=None):  # @save
+def evaluate_loss(net, data_iter, loss, device=None):  # @save
     """评估给定数据集上模型的损失"""
     if isinstance(net, torch.nn.Module):
         net.eval()  # 设置为评估模式
@@ -430,23 +419,23 @@ def train_epoch(net, train_iter, loss_func, updater, timer, device):
         timer.start()
         # 计算梯度并更新参数
         y_hat = net(X)
-        l = loss_func(y_hat, y)
+        loss = loss_func(y_hat, y)
         if isinstance(updater, torch.optim.Optimizer):
             # 使用PyTorch内置的优化器和损失函数
             updater.zero_grad()
-            l.mean().backward()
+            loss.backward()
             updater.step()
         else:
             # 自定义的权重优化器
-            l.sum().backward()
+            loss.sum().backward()
             updater(X.shape[0])
         with torch.no_grad():
-            metric.add(float(l.sum()), accuracy(y_hat, y), y.numel())
+            metric.add(float(loss.sum()), accuracy(y_hat, y), y.numel())
         timer.stop()
     return metric
 
 
-def train(net, train_dataloader, test_dataloader, updater, loss_fn, num_epochs):
+def train(net, train_dataloader, test_dataloader, updater, loss_fn, num_epochs, device=None):
     """训练模型"""
     animator = Animator(xlabel="epoch", xlim=[1, num_epochs], legend=["train loss", "train acc", "test acc"])
     timer = Timer()
@@ -460,11 +449,15 @@ def train(net, train_dataloader, test_dataloader, updater, loss_fn, num_epochs):
         train_metrics = train_epoch(net, train_dataloader, loss_fn, updater, timer, device)
         train_loss, train_acc = train_metrics[0] / train_metrics[2], train_metrics[1] / train_metrics[2]
         # 返回训练损失和训练精度
-        test_acc = evaluate_accuracy_gpu(net, test_dataloader)
-        # test_loss = evaluate_loss_gpu(net, test_iter, loss_func)
-        animator.add(epoch + 1, (train_loss, train_acc, test_acc))
-    print(f"train loss {train_loss:.3f}, train acc {train_acc:.3f}, test acc {test_acc:.3f}")
-    print(f"{train_metrics[2] * num_epochs / timer.sum():.1f} examples/sec " f"on {str(device)}")
+        if test_dataloader is not None:
+            test_acc = evaluate_accuracy(net, test_dataloader)
+            # test_loss = evaluate_loss_gpu(net, test_dataloader, loss_func)
+            animator.add(epoch + 1, (train_loss, train_acc, test_acc))
+            print(f"train loss {train_loss:.3f}, train acc {train_acc:.3f}, test acc {test_acc:.3f}")
+        else:
+            animator.add(epoch + 1, (train_loss, train_acc))
+            print(f"train loss {train_loss:.3f}, train acc {train_acc:.3f}")
+        print(f"{train_metrics[2] * num_epochs / timer.sum():.1f} examples/sec " f"on {str(device)}")
 
 
 def copy_model_params(src_model, tar_model):
